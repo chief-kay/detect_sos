@@ -39,7 +39,7 @@ def test_camera_stream():
     return True
 
 def test_object_detector():
-    detector = ObjectDetector()
+    detector = ObjectDetector(api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")
     dummy_frame = config.get_dummy_frame()
     detections = detector.detect(dummy_frame)
     assert isinstance(detections, list), "Detection result is not a list"
@@ -52,7 +52,7 @@ def test_with_camera_stream():
     
     # Initialize components
     try:
-        detector = ObjectDetector(enable_alerts=False, api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")  # Disable alerts for testing
+        detector = ObjectDetector(enable_alerts=True, api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")  # Disable alerts for testing
         camera = CameraStream(width=640, height=480, fps=30)
         
         # Start camera
@@ -271,7 +271,7 @@ def test_with_image_file():
         return False
     
     try:
-        detector = ObjectDetector(enable_alerts=False)  # Disable alerts for testing
+        detector = ObjectDetector(enable_alerts=False, api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")  # Disable alerts for testing
         
         # Load image
         frame = cv2.imread(image_path)
@@ -456,3 +456,5 @@ if __name__ == "__main__":
         run_interactive_tests()
     else:
         run_all_tests()
+
+        
