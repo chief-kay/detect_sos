@@ -423,6 +423,7 @@ def run_interactive_tests():
         "6": ("Alert System", test_alert_system),
         "7": ("Run All Tests", run_all_tests)
     }
+
     
     while True:
         print("\nAvailable Tests:")
