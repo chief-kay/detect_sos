@@ -154,7 +154,7 @@ def test_with_video_file():
         return False
     
     try:
-        detector = ObjectDetector(enable_alerts=False, api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")  # Disable alerts for testing
+        detector = ObjectDetector(enable_alerts=True, api_key="RlBsaWRPbmh1V0FFR1FMS29UQ2U")  # Enable alerts for testing
         cap = cv2.VideoCapture(video_path)
         
         if not cap.isOpened():

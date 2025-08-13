@@ -362,14 +362,14 @@ class ObjectDetector:
             for detection in output:
                 try:
                     self._apply_detection_logic(frame, detection, output)
-
+                    # print('detection', detection, 'alerts: ' , self.enable_alerts, ' req action: ', detection.get('requires_action', False))
                     # Log violations and send alerts if any
                     if detection.get('event') and detection['event'] != 'road_surface':
-                        # self.log_violation(detection)
+                        self.log_violation(detection)
 
                         # Send alert if required and enabled
                         if detection.get('requires_action') and self.enable_alerts:
-                            print("Sending alert")
+                            # print("Sending a .lert")
                             self._send_alert(detection, location, coordinates)
 
                 except Exception as e:
