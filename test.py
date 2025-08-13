@@ -91,7 +91,7 @@ def test_with_camera_stream():
             road_count = len([d for d in detections if d['label'] == 'road'])
             
             # Draw info rectangle
-            cv2.rectangle(annotated_frame, (10, 10), (600, 120), (50,50,50), cv2.FILLED)
+            # cv2.rectangle(annotated_frame, (10, 10), (600, 120), (50,50,50), cv2.FILLED)
             cv2.putText(annotated_frame, f'Frame: {frame_count} | Detections: {len(detections)}', 
                        (20, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255,255,255), 1)
             cv2.putText(annotated_frame, f'Critical: {critical_count} | High: {high_count} | Roads: {road_count}', 

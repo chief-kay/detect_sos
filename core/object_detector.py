@@ -610,18 +610,23 @@ class ObjectDetector:
             detection['requires_action'] = True
             detection['priority'] = 'critical'
 
+            
+            if label == 'Fire':
+                detection['event'] = 'fire_detected'
+                detection['action'] = 'fire_response'
+            elif label.lower() == 'help':
+                detection['event'] = 'help_requested'
+                detection['action'] = 'emergency_response'
+
+            ## ensure a confidence of 80% and above
+            if (detection["confidence"]<0.8):
+                return
             if label == 'accident-severe':
                 detection['event'] = 'severe_accident'
                 detection['action'] = 'immediate_emergency_response'
             elif label == 'accident-moderate':
                 detection['event'] = 'moderate_accident'
                 detection['action'] = 'urgent_response'
-            elif label == 'Fire':
-                detection['event'] = 'fire_detected'
-                detection['action'] = 'fire_response'
-            elif label.lower() == 'help':
-                detection['event'] = 'help_requested'
-                detection['action'] = 'emergency_response'
 
         # High priority events
         elif label in self.high_priority_events:
