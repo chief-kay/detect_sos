@@ -20,7 +20,7 @@ from core.alert_system import AlertSystem
 
 class ObjectDetector:
 
-    def __init__(self, model_path='resources/dataset/train/weights/best.pt', conf_thresh=0.5, device='auto',
+    def __init__(self, model_path='resources/dataset/train/weights/best.pt', conf_thresh=0.4, device='auto',
                  enable_alerts=True, api_key=None):
         """
         Initialize object detector with custom trained YOLO model.
