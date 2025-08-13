@@ -20,7 +20,7 @@ from core.alert_system import AlertSystem
 
 class ObjectDetector:
 
-    def __init__(self, model_path='resources/dataset/train/weights/best.pt', conf_thresh=0.5, device='auto',
+    def __init__(self, model_path='resources/dataset/train/weights/best.pt', conf_thresh=0.3, device='auto',
                  enable_alerts=True, api_key=None):
         """
         Initialize object detector with custom trained YOLO model.
@@ -766,11 +766,14 @@ class ObjectDetector:
         # print("Drawing detections on frame...", detections)
 
         for detection in detections:
-            label = detection['label']
+            label: str = detection['label']
             confidence = detection['confidence']
             priority = detection.get('priority', 'low')
             class_id = detection['class_id']
             x1, y1, x2, y2 = detection['bbox']
+
+            if ("accident" in label and confidence < 0.8):
+                continue
 
             # Get color for this class using color palette
             color = self.bbox_colors[class_id % len(self.bbox_colors)]
