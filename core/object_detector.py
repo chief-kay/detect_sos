@@ -35,6 +35,8 @@ class ObjectDetector:
         self.model_path = model_path
         self.conf_thresh = conf_thresh
         self.device = device
+        self.detection_persistence = {}
+        self.persistence_threshold = 10
 
         # Setup logging
         self.logger = logging.getLogger(__name__)
@@ -192,8 +194,8 @@ class ObjectDetector:
 
     def _send_alert(self, detection: Dict, location: str | None = None, coordinates: str | None = None):
         """
-        Send alert for detected violation
-
+        Send alert for detected violation after 10 consecutive frames
+        
         Args:
             detection: Detection dictionary with event details
             location: Location information
@@ -202,21 +204,36 @@ class ObjectDetector:
         if not self.enable_alerts or not self.alert_system:
             return
         
-        print('Alert system sending alert')
-
         event_type = detection.get('event', 'unknown')
         priority = detection.get('priority', 'low')
-
-        # Check if we should send this alert (rate limiting)
+        label = detection.get('label', 'unknown')
+        bbox = detection.get('bbox', [0, 0, 0, 0])
+        
+        # Create a unique key for this detection based on event type and approximate location
+        # This helps track the same event across frames even if bounding box moves slightly
+        detection_key = f"{event_type}_{label}_{priority}"
+        
+        # Update persistence counter for this detection
+        if detection_key in self.detection_persistence:
+            self.detection_persistence[detection_key] += 1
+        else:
+            self.detection_persistence[detection_key] = 1
+        
+        # Only proceed if we've seen this detection for enough consecutive frames
+        if self.detection_persistence[detection_key] < self.persistence_threshold:
+            self.logger.debug(f"Detection persistence: {self.detection_persistence[detection_key]}/{self.persistence_threshold} for {detection_key}")
+            return
+        
+        # We've reached the threshold, now check rate limiting
         if not self._should_send_alert(event_type, priority):
-            print("Rate exceeded")
             self.logger.debug(f"Alert rate limited: {event_type} ({priority})")
             return
-
+        
+        print(f'Alert system sending alert after {self.persistence_threshold} consecutive frames')
+        
         # Format event description
         event_description = self._format_event_description(detection)
-        # print("Sending alert")
-
+        
         try:
             # Send alert via AlertSystem
             result = self.alert_system.trigger_alert(
@@ -226,17 +243,18 @@ class ObjectDetector:
                 coordinates=coordinates,
                 drone_id="UAV-4A"
             )
-
+            
             if result.get('success'):
                 self.logger.info(f"Alert sent successfully for {event_type}")
                 detection['alert_sent'] = True
                 detection['alert_id'] = result.get('alert_id')
+                # Reset counter after successful alert to prevent immediate re-triggering
+                self.detection_persistence[detection_key] = 0
             else:
-                self.logger.error(
-                    f"Alert failed for {event_type}: {result.get('error')}")
+                self.logger.error(f"Alert failed for {event_type}: {result.get('error')}")
                 detection['alert_sent'] = False
                 detection['alert_error'] = result.get('error')
-
+                
         except Exception as e:
             self.logger.error(f"Exception sending alert for {event_type}: {e}")
             detection['alert_sent'] = False
@@ -370,11 +388,40 @@ class ObjectDetector:
             self.detection_count += len(output)
             self.last_detection_time = time.time()
 
+            self._clean_detection_persistence(output)
+
             return output
 
         except Exception as e:
             self.logger.error(f"Detection failed: {e}")
             return []
+    
+    def _clean_detection_persistence(self, current_detections: List[Dict]):
+        """
+        Clean up persistence tracking for detections that are no longer present
+        
+        Args:
+            current_detections: List of current frame detections
+        """
+        # Get all current detection keys
+        current_keys = set()
+        for detection in current_detections:
+            if detection.get('event'):
+                event_type = detection.get('event', 'unknown')
+                label = detection.get('label', 'unknown')
+                priority = detection.get('priority', 'low')
+                key = f"{event_type}_{label}_{priority}"
+                current_keys.add(key)
+        
+        # Remove tracking for detections no longer in frame
+        keys_to_remove = []
+        for key in self.detection_persistence:
+            if key not in current_keys:
+                keys_to_remove.append(key)
+        
+        # Remove stale entries
+        for key in keys_to_remove:
+            del self.detection_persistence[key]
 
     def analyze_objects_on_road(self, detections: List[Dict]) -> Dict:
         """

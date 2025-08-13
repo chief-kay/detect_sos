@@ -103,21 +103,21 @@ class AlertSystem:
             # Send request to Arkesel API
             # hold on to arkesel api key
 
-            # response = requests.post(
-            #     self.base_url,
-            #     json=payload,
-            #     headers={'Content-Type': 'application/json',
-            #              'api-key': self.api_key},
-            #     timeout=30
-            # )
+            response = requests.post(
+                self.base_url,
+                json=payload,
+                headers={'Content-Type': 'application/json',
+                         'api-key': self.api_key},
+                timeout=30
+            )
 
-            # response_data = response.json()
-            # print(f"Response from Arkesel API: {response_data}")
-            response = DummyResponse()
-            response_data = {
-                'status': 'success',
-                'status_code': 200,
-            }
+            response_data = response.json()
+            print(f"Response from Arkesel API: {response_data}")
+            # response = DummyResponse()
+            # response_data = {
+            #     'status': 'success',
+            #     'status_code': 200,
+            # }
 
             if response_data['status'] == 'success':
                 self.logger.info(
@@ -245,81 +245,72 @@ class AlertSystem:
             return True
 
     def trigger_alert(self, event: str, priority: str = 'medium', location: str | None = None,
-                      coordinates: str | None = None, drone_id: str = "4A") -> Dict:
+                  coordinates: str | None = None, drone_id: str = "4A") -> Dict:
         """
-        High-level function to trigger emergency alert via SMS
-
+        High-level function to trigger emergency alert via SMS using background thread
+        
         Args:
             event: Event description
             priority: Priority level ('critical', 'high', 'medium', 'low')
             location: Event location
             coordinates: GPS coordinates
             drone_id: Drone identifier
-
+            
         Returns:
-            Alert result dictionary
+            Alert result dictionary with preliminary status
         """
         try:
-            # Check rate limiting
+            # Check rate limiting - keep this in main thread
             if not self._should_send_alert(event, priority):
                 return {
                     'success': False,
                     'error': 'Rate limited',
                     'message': 'Alert suppressed due to rate limiting'
                 }
-
-            # Format alert message
+                
+            # Format alert message - quick operation, keep in main thread
             alert_message = self.format_alert_message(
                 event,
                 location or "Ayeduase Road, Kumasi",
                 drone_id,
                 coordinates
             )
-
-            # Get appropriate contacts
+            
+            # Get appropriate contacts - quick operation, keep in main thread
             contacts = self.get_contacts_for_event(event, priority)
-
+            
             if not contacts:
-                self.logger.error(
-                    f"No contacts found for event: {event}, priority: {priority}")
+                self.logger.error(f"No contacts found for event: {event}, priority: {priority}")
                 return {
                     'success': False,
                     'error': 'No contacts available',
                     'message': alert_message
                 }
-            self.logger.info(
-                f"Triggering {priority} alert for event: {event} to {len(contacts)} contacts with api key={self.api_key}")
-            # Send SMS
-            result = self.send_sms(contacts, alert_message, priority)
-
-            # Log alert in history
-            alert_record = {
-                'timestamp': datetime.now().isoformat(),
-                'event': event,
-                'priority': priority,
-                'location': location,
-                'coordinates': coordinates,
-                'drone_id': drone_id,
-                'contacts_count': len(contacts),
-                'success': result.get('success', False),
-                'message_id': result.get('message_id')
-            }
-
-            self.alert_history.append(alert_record)
-
-            # Console output for monitoring
-            status = "✅ SENT" if result['success'] else "❌ FAILED"
-            print(
-                f"[ALERT {status}] {priority.upper()} | {event} | {len(contacts)} contacts")
-
+            
+            # Generate a unique alert ID before spawning the thread
+            alert_id = len(self.alert_history) + 1
+            
+            # Create and start background thread for SMS sending
+            alert_thread = Thread(
+                target=self._send_alert_thread,
+                args=(event, priority, location, coordinates, drone_id, contacts, alert_message, alert_id),
+                daemon=True  # Make thread daemon so it doesn't block program exit
+            )
+            alert_thread.start()
+            
+            # Log that alert was queued for sending
+            self.logger.info(f"Alert {alert_id} queued for sending to {len(contacts)} contacts")
+            print(f"[ALERT QUEUED] {priority.upper()} | {event} | {len(contacts)} contacts")
+            
+            # Return immediate response indicating alert is being sent
             return {
-                'success': result['success'],
+                'success': True,
                 'message': alert_message,
                 'contacts_notified': len(contacts),
-                'sms_result': result,
-                'alert_id': len(self.alert_history)
+                'status': 'sending',
+                'alert_id': alert_id
             }
-
+                
         except Exception as e:
             self.logger.error(f"Alert trigger failed: {e}")
             return {
@@ -327,6 +318,45 @@ class AlertSystem:
                 'error': str(e),
                 'message': f"Failed to send alert for: {event}"
             }
+
+    def _send_alert_thread(self, event, priority, location, coordinates, drone_id, contacts, alert_message, alert_id):
+        """
+        Background thread function to send SMS alert
+        
+        Args:
+            All parameters needed for sending and logging the alert
+        """
+        try:
+            self.logger.info(f"Triggering {priority} alert for event: {event} to {len(contacts)} contacts with api key={self.api_key}")
+            
+            # Send SMS
+            result = self.send_sms(contacts, alert_message, priority)
+            
+            # Log alert in history with thread-safe lock
+            with self.rate_limit_lock:  # Reuse existing lock for thread safety
+                alert_record = {
+                    'timestamp': datetime.now().isoformat(),
+                    'event': event,
+                    'priority': priority,
+                    'location': location,
+                    'coordinates': coordinates,
+                    'drone_id': drone_id,
+                    'contacts_count': len(contacts),
+                    'success': result.get('success', False),
+                    'message_id': result.get('message_id'),
+                    'alert_id': alert_id
+                }
+                
+                self.alert_history.append(alert_record)
+            
+            # Console output for monitoring
+            status = "✅ SENT" if result['success'] else "❌ FAILED"
+            print(f"[ALERT {status}] {priority.upper()} | {event} | {len(contacts)} contacts | ID: {alert_id}")
+            
+        except Exception as e:
+            # Handle exceptions in the thread
+            self.logger.error(f"Background alert thread failed: {e}")
+            print(f"[ALERT ❌ ERROR] {priority.upper()} | {event} | Error: {str(e)}")
 
     def send_test_alert(self, test_numbers: List[str] | None = None) -> Dict:
         """Send a test alert to verify system functionality"""
